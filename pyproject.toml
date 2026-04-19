@@ -18,6 +18,8 @@ dependencies = [
     "ordered-set==4.1.0",
     "proces==0.1.7",
     "PyAutoGUI==0.9.54",
+    "PyPDF2>=3.10",
+    "pdf2image>=1.16.0",
 ]
 
 [project.optional-dependencies]
