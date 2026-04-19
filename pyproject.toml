@@ -18,8 +18,6 @@ dependencies = [
     "ordered-set==4.1.0",
     "proces==0.1.7",
     "PyAutoGUI==0.9.54",
-    "PyPDF2>=3.10",
-    "pdf2image>=1.16.0",
 ]
 
 [project.optional-dependencies]
@@ -36,14 +34,39 @@ chinese = [
     "pypinyin==0.55.0",
 ]
 windows = [
-    "pyreadline3",
-    "pyperclip",
+    "pyreadline3; sys_platform == 'win32'",
+    "pyperclip; sys_platform == 'win32'",
 ]
-all = [
-    "kokorodoki[japanese,chinese]",
+windows-torch = [
+    "kokorodoki[windows]",
+    "torch@https://download.pytorch.org/whl/cu121/torch-2.5.1%2Bcu121-cp312-cp312-win_amd64.whl ; sys_platform == 'win32'",
+    "torchvision@https://download.pytorch.org/whl/cu121/torchvision-0.20.1%2Bcu121-cp312-cp312-win_amd64.whl ; sys_platform == 'win32'",
+    "torchaudio@https://download.pytorch.org/whl/cu121/torchaudio-2.5.1%2Bcu121-cp312-cp312-win_amd64.whl ; sys_platform == 'win32'",
 ]
-dev = [
-    "pytest",
+dev = ["pytest"]
+
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://pypi.org/simple"
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32'" },
+    { index = "pytorch", marker = "sys_platform != 'win32'" },
+]
+torchvision = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32'" },
+    { index = "pytorch", marker = "sys_platform != 'win32'" },
+]
+torchaudio = [
+    { index = "pytorch-cu121", marker = "sys_platform == 'win32'" },
+    { index = "pytorch", marker = "sys_platform != 'win32'" },
 ]
 
 [project.scripts]
@@ -54,6 +77,9 @@ kokorodoki-install-service = "install_service:install_service"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src"]

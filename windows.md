@@ -49,14 +49,20 @@ If you have an NVIDIA GPU:
 
 Install Kokorodoki globally:
 
+Without CUDA (CPU only):
 ```bash
-uv tool install -p python3.12 https://github.com/eel-brah/kokorodoki/archive/refs/heads/master.zip
+uv tool install -p python3.12 "https://github.com/eel-brah/kokorodoki/archive/refs/heads/master.zip[windows]"
+```
+
+With CUDA support:
+```bash
+uv tool install -p python3.12 "https://github.com/eel-brah/kokorodoki/archive/refs/heads/master.zip[windows-torch]"
 ```
 
 #### With Japanese and Chinese support:
 
 ```bash
-uv tool install -p python3.12 "https://github.com/eel-brah/kokorodoki/archive/refs/heads/master.zip[japanese,chinese]"
+uv tool install -p python3.12 "https://github.com/eel-brah/kokorodoki/archive/refs/heads/master.zip[windows,japanese,chinese]"
 ```
 
 ---
@@ -67,14 +73,17 @@ uv tool install -p python3.12 "https://github.com/eel-brah/kokorodoki/archive/re
 git clone https://github.com/eel-brah/kokorodoki
 cd kokorodoki
 
-# Install dependencies
-uv sync
+# CPU install
+uv sync --extra windows
+
+# GPU install (CUDA)
+uv sync --extra windows-torch
 
 # Run from project
 uv run kokorodoki
 ```
 
-#### Optional: install locally as a tool
+#### Option 3: install locally as a tool
 
 ```bash
 uv tool install .
@@ -94,6 +103,8 @@ kokorodoki
 # Run app
 kokorodoki
 
+# If running from source, use `uv run kokorodoki` / `uv run doki`
+
 # Help
 kokorodoki -h
 
@@ -109,11 +120,6 @@ doki
 # Change voice
 doki -v af_sky
 ```
-
-> Note:
->
-> * If installed via `uv tool install`, use `kokorodoki` / `doki`
-> * If running from source, use `uv run kokorodoki` / `uv run doki`
 
 ---
 
@@ -195,7 +201,7 @@ print(torch.cuda.is_available())
 If CUDA is not available, reinstall PyTorch with GPU support:
 
 ```bash
-uv pip uninstall torch -y
+uv pip uninstall torch
 uv pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 ```
 
@@ -203,7 +209,7 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 
 ### Common Issues
 
-* `doki` not found → restart terminal after install
+* `kokorodoki` not found → restart terminal after install
 * No audio → verify `espeak-ng` installed
 * CUDA not detected → reinstall correct PyTorch version
 
@@ -212,3 +218,15 @@ uv pip install torch torchvision torchaudio --index-url https://download.pytorch
 ## ✅ Done
 
 You're all set! 🚀
+
+## Uninstall / Cleanup
+If installed globally 
+````
+uv tool uninstall kokorodoki
+````
+
+If installed manually (cloned repo)
+Delete the project folder:
+````
+rm -rf kokorodoki
+````
