@@ -8,11 +8,26 @@ from tkinter import filedialog, messagebox
 from typing import Dict, Optional
 
 import easyocr
+import numpy as np
 import PyPDF2
 import ttkbootstrap as ttk
-from pdf2image import convert_from_path
+from PIL import Image
 from kokoro import KPipeline
 from ttkbootstrap.tooltip import ToolTip
+
+try:
+    import fitz
+    HAS_FITZ = True
+except ImportError:
+    fitz = None
+    HAS_FITZ = False
+
+try:
+    from pdf2image import convert_from_path
+    HAS_PDF2IMAGE = True
+except ImportError:
+    convert_from_path = None
+    HAS_PDF2IMAGE = False
 
 from config import MAX_SPEED, MIN_SPEED, TITLE, VERSION, WINDOW_SIZE
 from models import TTSPlayer
@@ -450,38 +465,56 @@ class Gui:
                                 text = "\n".join(
                                     page.extract_text() or "" for page in reader.pages
                                 )
-                            
+
                             # If no text extracted, it's likely a scanned PDF - use OCR
                             if not text.strip():
-                                self.text_area.insert(
-                                    tk.END,
-                                    "Detected scanned PDF. Processing with OCR (this may take a moment)...\n",
-                                )
-                                self.text_area.update()
-                                
-                                # Convert PDF pages to images and apply OCR
-                                images = convert_from_path(file_path)
+                                if HAS_FITZ:
+                                    self.text_area.insert(
+                                        tk.END,
+                                        "Detected scanned PDF. Processing with OCR using PyMuPDF (this may take a moment)...\n",
+                                    )
+                                    self.text_area.update()
+
+                                    images = []
+                                    document = fitz.open(file_path)
+                                    for page_index in range(len(document)):
+                                        page = document[page_index]
+                                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                                        mode = "RGBA" if pix.alpha else "RGB"
+                                        image = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+                                        images.append(image)
+                                elif HAS_PDF2IMAGE:
+                                    self.text_area.insert(
+                                        tk.END,
+                                        "Detected scanned PDF. Processing with OCR using pdf2image (this may take a moment)...\n",
+                                    )
+                                    self.text_area.update()
+                                    images = convert_from_path(file_path)
+                                else:
+                                    raise RuntimeError(
+                                        "Scanned PDF detected, but neither PyMuPDF nor pdf2image is available. "
+                                        "Install PyMuPDF or poppler for pdf2image."
+                                    )
+
                                 ocr_texts = []
-                                
                                 for idx, image in enumerate(images):
-                                    # Update progress
                                     self.text_area.delete(1.0, tk.END)
                                     self.text_area.insert(
                                         tk.END,
                                         f"OCR Processing: Page {idx + 1}/{len(images)}...\n",
                                     )
                                     self.text_area.update()
-                                    
-                                    # Apply OCR
-                                    results = self.reader.readtext(image)
+
+                                    image_array = np.array(image)
+                                    results = self.reader.readtext(image_array)
                                     page_text = "\n".join(
                                         text for _, text, _ in results if text
                                     ).strip()
                                     if page_text:
                                         ocr_texts.append(page_text)
-                                
+
                                 text = "\n".join(ocr_texts)
-                            
+
                             self.text_area.delete(1.0, tk.END)
                             self.text_area.insert(tk.END, text)
                         except Exception as e:
