@@ -437,8 +437,25 @@ def merge_short_sentences(sentences: list[str], min_len=50, max_len=300) -> list
 
 
 def split_text_to_sentences(text: str, language: str) -> List[str]:
-    """Tokenize text into sentences"""
-    sentences = sent_tokenize(text, language=language)
+    """Tokenize text into sentences."""
+    try:
+        sentences = sent_tokenize(text, language=language)
+    except LookupError as exc:
+        # Example: Resource punkt_tab not found
+        try:
+            import nltk
+
+            nltk.download("punkt", quiet=True)
+            nltk.download("punkt_tab", quiet=True)
+            sentences = sent_tokenize(text, language=language)
+        except Exception:
+            # Fallback to naive splitting by punctuation if tokenizers fail
+            sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    except Exception:
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+
+    if not sentences:
+        sentences = [text.strip()] if text.strip() else []
 
     new_sentences = []
     for sentence in sentences:

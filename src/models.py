@@ -126,24 +126,20 @@ class TTSPlayer:
             console.print(f"[bold red]Generation error:[/] {str(e)}")
             self.audio_queue.put(None)  # Ensure playback thread exits
 
-    def generate_audio_file(self, text: list | str, output_file="Output.wav") -> None:
+    def generate_audio_file(self, text: list | str, output_file="Output.wav", progress_callback=None) -> None:
         """Generate audio file"""
         try:
-            with Progress(
-                SpinnerColumn("dots", style="yellow", speed=0.8),
-                TextColumn("[bold yellow]{task.description}"),
-                BarColumn(pulse_style="yellow", complete_style="blue"),
-                TimeElapsedColumn(),
-            ) as progress:
-
-                task = progress.add_task(
-                    f"[bold yellow]Generating {output_file}",
-                    total=None,
-                )
-
-                sentences = [text] if isinstance(text, str) else text
+            sentences = [text] if isinstance(text, str) else text
+            total_sentences = len(sentences)
+            
+            if progress_callback:
+                # GUI mode: use callback
+                progress_callback(0, total_sentences, "Starting generation...")
+                
                 audio_chunks = []
-                for sentence in sentences:
+                for i, sentence in enumerate(sentences):
+                    progress_callback(i, total_sentences, f"Processing sentence {i+1}/{total_sentences}...")
+                    
                     generator = self.pipeline(
                         sentence, voice=self.voice, speed=self.speed, split_pattern=None
                     )
@@ -154,21 +150,59 @@ class TTSPlayer:
                         )
                         audio_chunks.append(self.to_stereo(trimed_audio))
 
+                progress_callback(total_sentences, total_sentences, "Writing to file...")
+                
                 full_audio = np.concatenate(audio_chunks, axis=0)
                 sf.write(output_file, full_audio, SAMPLE_RATE, format="WAV")
+                
+                progress_callback(total_sentences, total_sentences, f"Saved to {output_file}")
+            else:
+                # CLI mode: use rich progress
+                with Progress(
+                    SpinnerColumn("dots", style="yellow", speed=0.8),
+                    TextColumn("[bold yellow]{task.description}"),
+                    BarColumn(pulse_style="yellow", complete_style="blue"),
+                    TimeElapsedColumn(),
+                ) as progress:
 
-                progress.update(
-                    task,
-                    completed=1,
-                    total=1,
-                    description=f"[bold green]Saved to {output_file}[/]",
-                )
+                    task = progress.add_task(
+                        f"[bold yellow]Generating {output_file}",
+                        total=None,
+                    )
+
+                    audio_chunks = []
+                    for sentence in sentences:
+                        generator = self.pipeline(
+                            sentence, voice=self.voice, speed=self.speed, split_pattern=None
+                        )
+
+                        for result in generator:
+                            trimed_audio, _ = librosa.effects.trim(
+                                result.audio.numpy(), top_db=70
+                            )
+                            audio_chunks.append(self.to_stereo(trimed_audio))
+
+                    full_audio = np.concatenate(audio_chunks, axis=0)
+                    sf.write(output_file, full_audio, SAMPLE_RATE, format="WAV")
+
+                    progress.update(
+                        task,
+                        completed=1,
+                        total=1,
+                        description=f"[bold green]Saved to {output_file}[/]",
+                    )
 
         except KeyboardInterrupt:
-            console.print("\n[bold yellow]Exiting...[/]")
+            if progress_callback:
+                progress_callback(0, 1, "Cancelled")
+            else:
+                console.print("\n[bold yellow]Exiting...[/]")
             sys.exit()
         except Exception as e:
-            console.print(f"[bold red]Generation error:[/] {str(e)}")
+            if progress_callback:
+                progress_callback(0, 1, f"Error: {str(e)}")
+            else:
+                console.print(f"[bold red]Generation error:[/] {str(e)}")
 
     def generate_srt_timed_audio(self, srt_file: str, output_file="Output.wav") -> None:
         """Generate timed audio based on SRT subtitle file"""

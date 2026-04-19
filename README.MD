@@ -370,11 +370,22 @@ kokorodoki
 
 ### 2/4. 🖌️ GUI Mode
 
-Launch a graphical interface. 
+Launch a graphical interface for interactive text-to-speech.
 
 ```bash
+# If installed globally via uv tool install
 kokorodoki --gui
+
+# If running from source (manual install)
+uv run kokorodoki --gui
 ```
+
+Features:
+- Type or paste text for TTS
+- Load text files or images (OCR)
+- Play, pause, resume, skip sentences
+- Change language, voice, speed
+- **Save audio to WAV file** using the 💾 button
 
 Themes:
 1. darkly
@@ -474,10 +485,16 @@ Use the command-line interface for quick, one-off tasks:
 ```bash
 # Speak text
 kokorodoki --text "Hello, world!"              
+
+# Speak text and save audio to file
+kokorodoki --text "Hello, world!" --output hello.wav
+
 # Speak text from a file and save the audio to a file
 kokorodoki --file input.txt --output out.wav   
+
 # Generate timed audio from SRT subtitle file (auto-detected)
 kokorodoki --file subtitles.srt --output timed_audio.wav
+
 # Speak using all available voices of a specific language
 kokorodoki -l a --text "All voices" --all      
 ```

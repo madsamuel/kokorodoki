@@ -1,13 +1,16 @@
+import io
 import os
 import queue
 import signal
 import threading
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import filedialog, messagebox
 from typing import Dict, Optional
 
 import easyocr
+import PyPDF2
 import ttkbootstrap as ttk
+from pdf2image import convert_from_path
 from kokoro import KPipeline
 from ttkbootstrap.tooltip import ToolTip
 
@@ -261,6 +264,64 @@ class Gui:
         self.text_area.tag_add("highlight", indices["start"], indices["end"])
         self.text_area.see(indices["start"])
 
+    def save_audio(self) -> None:
+        """Save audio to file"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".wav",
+            filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            title="Save Audio As",
+        )
+        if file_path:
+            text = self.text_area.get("1.0", tk.END).strip()
+            if text:
+                try:
+                    # Split text into sentences for progress tracking
+                    from utils import split_text_to_sentences
+                    sentences = split_text_to_sentences(text, self.current_language)
+                    
+                    # Show progress bar
+                    self.progress_bar.grid()
+                    self.progress_var.set(0)
+                    self.status_label.config(text="Preparing to save audio...")
+                    
+                    # Disable save button during generation
+                    self.save_btn.config(state="disabled")
+                    
+                    # Run generation in thread
+                    def generate_thread():
+                        try:
+                            def progress_callback(current, total, message):
+                                if total > 0:
+                                    progress = (current / total) * 100
+                                    self.progress_var.set(progress)
+                                self.status_label.config(text=message)
+                                self.root.update_idletasks()
+                            
+                            self.player.generate_audio_file(sentences, output_file=file_path, progress_callback=progress_callback)
+                            
+                            # Hide progress bar and re-enable button
+                            self.root.after(0, lambda: self.progress_bar.grid_remove())
+                            self.root.after(0, lambda: self.save_btn.config(state="normal"))
+                            self.root.after(0, lambda: self.status_label.config(text=f"Audio saved to {file_path}"))
+                            self.root.after(0, lambda: messagebox.showinfo("Save Successful", f"Audio saved to {file_path}"))
+                            
+                        except Exception as e:
+                            self.root.after(0, lambda: self.progress_bar.grid_remove())
+                            self.root.after(0, lambda: self.save_btn.config(state="normal"))
+                            self.root.after(0, lambda: self.status_label.config(text="Save failed"))
+                            self.root.after(0, lambda: messagebox.showerror("Save Error", f"Failed to save audio: {str(e)}"))
+                    
+                    thread = threading.Thread(target=generate_thread, daemon=True)
+                    thread.start()
+                    
+                except Exception as e:
+                    self.progress_bar.grid_remove()
+                    self.save_btn.config(state="normal")
+                    self.status_label.config(text="Save failed")
+                    messagebox.showerror("Save Error", f"Failed to save audio: {str(e)}")
+            else:
+                messagebox.showwarning("No Text", "Please enter some text to save as audio.")
+
     def skip_sentence(self) -> None:
         """Skip a sentence"""
         self.player.skip_sentence()
@@ -270,6 +331,7 @@ class Gui:
         """Back a sentence"""
         self.player.back_sentence()
         self.status_label.config(text="Playback: back one sentence")
+
 
     def create_widgets(self) -> None:
         """Create widgets"""
@@ -322,6 +384,18 @@ class Gui:
         )
         self.status_label.grid(row=0, column=0, sticky="w")
 
+        # Progress bar for audio generation
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(
+            status_frame,
+            variable=self.progress_var,
+            maximum=100,
+            mode="determinate",
+            length=200,
+        )
+        self.progress_bar.grid(row=0, column=1, sticky="ew", padx=(10, 10))
+        self.progress_bar.grid_remove()  # Hide initially
+
         version_label = ttk.Label(
             status_frame,
             text=VERSION,
@@ -332,9 +406,14 @@ class Gui:
 
     def choose_file(self):
         try:
-            file_path = tk.filedialog.askopenfilename(
-                title="Select a Text file of an image",
-                filetypes=[("All files", "*.*"), ("Text files", "*.txt")],
+            file_path = filedialog.askopenfilename(
+                title="Select a Text/Image/PDF file",
+                filetypes=[
+                    ("All files", "*.*"),
+                    ("Text files", "*.txt;*.md;*.srt"),
+                    ("PDF files", "*.pdf"),
+                    ("Image files", "*.png;*.jpg;*.jpeg;*.webp;*.bmp;*.tiff;*.tif"),
+                ],
             )
             if file_path:
                 self.file_path_var.set(f"File: {file_path}")
@@ -362,10 +441,70 @@ class Gui:
                             tk.END,
                             image_text,
                         )
-                    else:
-                        with open(file_path, "r", encoding="utf-8") as file:
+                    elif file_ext == ".pdf":
+                        self.text_area.delete(1.0, tk.END)
+                        try:
+                            # First, try standard text extraction
+                            with open(file_path, "rb") as pdf_file:
+                                reader = PyPDF2.PdfReader(pdf_file)
+                                text = "\n".join(
+                                    page.extract_text() or "" for page in reader.pages
+                                )
+                            
+                            # If no text extracted, it's likely a scanned PDF - use OCR
+                            if not text.strip():
+                                self.text_area.insert(
+                                    tk.END,
+                                    "Detected scanned PDF. Processing with OCR (this may take a moment)...\n",
+                                )
+                                self.text_area.update()
+                                
+                                # Convert PDF pages to images and apply OCR
+                                images = convert_from_path(file_path)
+                                ocr_texts = []
+                                
+                                for idx, image in enumerate(images):
+                                    # Update progress
+                                    self.text_area.delete(1.0, tk.END)
+                                    self.text_area.insert(
+                                        tk.END,
+                                        f"OCR Processing: Page {idx + 1}/{len(images)}...\n",
+                                    )
+                                    self.text_area.update()
+                                    
+                                    # Apply OCR
+                                    results = self.reader.readtext(image)
+                                    page_text = "\n".join(
+                                        text for _, text, _ in results if text
+                                    ).strip()
+                                    if page_text:
+                                        ocr_texts.append(page_text)
+                                
+                                text = "\n".join(ocr_texts)
+                            
                             self.text_area.delete(1.0, tk.END)
-                            self.text_area.insert(tk.END, file.read())
+                            self.text_area.insert(tk.END, text)
+                        except Exception as e:
+                            self.text_area.delete(1.0, tk.END)
+                            self.text_area.insert(
+                                tk.END,
+                                f"Error reading PDF file: {str(e)}",
+                            )
+                    else:
+                        try:
+                            with open(file_path, "r", encoding="utf-8") as file:
+                                content = file.read()
+                        except UnicodeDecodeError:
+                            with open(
+                                file_path,
+                                "r",
+                                encoding="cp1252",
+                                errors="replace",
+                            ) as file:
+                                content = file.read()
+
+                        self.text_area.delete(1.0, tk.END)
+                        self.text_area.insert(tk.END, content)
                 except Exception as e:
                     self.text_area.delete(1.0, tk.END)
                     self.text_area.insert(tk.END, f"Error reading file: {str(e)}")
@@ -455,7 +594,7 @@ class Gui:
         # Buttons frame
         buttons_frame = ttk.Frame(playback_frame)
         buttons_frame.grid(row=0, column=0, pady=10)
-        buttons_frame.columnconfigure((0, 1, 2, 3), weight=1)
+        buttons_frame.columnconfigure((0, 1, 2, 3, 4), weight=1)
 
         prev_btn = ttk.Button(
             buttons_frame,
@@ -496,6 +635,16 @@ class Gui:
         )
         next_btn.grid(row=0, column=3, padx=5)
         ToolTip(next_btn, text="Next", bootstyle="info")
+
+        self.save_btn = ttk.Button(
+            buttons_frame,
+            text="💾",
+            command=self.save_audio,
+            bootstyle="primary-outline",
+            width=8,
+        )
+        self.save_btn.grid(row=0, column=4, padx=5)
+        ToolTip(self.save_btn, text="Save Audio", bootstyle="primary")
 
         # Settings section
         settings_frame = ttk.Frame(control_panel)

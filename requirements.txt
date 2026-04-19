@@ -17,3 +17,4 @@ pyopenjtalk==0.4.1
 pypinyin==0.55.0
 unidic-lite==1.0.8
 PyAutoGUI==0.9.54
+PyPDF2==3.0.0
