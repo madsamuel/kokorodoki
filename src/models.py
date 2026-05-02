@@ -1,3 +1,4 @@
+import os
 import queue
 import sys
 import threading
@@ -131,6 +132,7 @@ class TTSPlayer:
         try:
             sentences = [text] if isinstance(text, str) else text
             total_sentences = len(sentences)
+            print(f"Saving audio to: {os.path.abspath(output_file)}")
             
             if progress_callback:
                 # GUI mode: use callback

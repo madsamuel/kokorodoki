@@ -9,7 +9,7 @@ from typing import Dict, Optional
 
 import easyocr
 import numpy as np
-import PyPDF2
+from pypdf import PdfReader
 import ttkbootstrap as ttk
 from PIL import Image
 from kokoro import KPipeline
@@ -461,7 +461,7 @@ class Gui:
                         try:
                             # First, try standard text extraction
                             with open(file_path, "rb") as pdf_file:
-                                reader = PyPDF2.PdfReader(pdf_file)
+                                reader = PdfReader(pdf_file)
                                 text = "\n".join(
                                     page.extract_text() or "" for page in reader.pages
                                 )
