@@ -205,6 +205,7 @@ class TTSPlayer:
                 progress_callback(0, 1, f"Error: {str(e)}")
             else:
                 console.print(f"[bold red]Generation error:[/] {str(e)}")
+            raise
 
     def generate_srt_timed_audio(self, srt_file: str, output_file="Output.wav") -> None:
         """Generate timed audio based on SRT subtitle file"""

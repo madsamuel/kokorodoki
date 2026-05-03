@@ -2,6 +2,7 @@ import io
 import os
 import queue
 import signal
+import subprocess
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -77,6 +78,7 @@ class Gui:
         self.reader = image_reader
 
         self.queue = queue.Queue()
+        self.last_saved_file = None
         self.root.after(100, self.process_queue)
 
         self.default_font = "Segoe UI"
@@ -317,9 +319,7 @@ class Gui:
                             # Hide progress bar and re-enable button
                             self.root.after(0, lambda: self.progress_bar.grid_remove())
                             self.root.after(0, lambda: self.save_btn.config(state="normal"))
-                            self.root.after(0, lambda: self.status_label.config(text=f"Audio saved to {file_path}"))
-                            self.root.after(0, lambda: messagebox.showinfo("Save Successful", f"Audio saved to {file_path}"))
-                            
+                            self.root.after(0, lambda: self._update_saved_file_status(file_path))
                         except Exception as e:
                             self.root.after(0, lambda: self.progress_bar.grid_remove())
                             self.root.after(0, lambda: self.save_btn.config(state="normal"))
@@ -336,6 +336,26 @@ class Gui:
                     messagebox.showerror("Save Error", f"Failed to save audio: {str(e)}")
             else:
                 messagebox.showwarning("No Text", "Please enter some text to save as audio.")
+
+    def _update_saved_file_status(self, file_path: str) -> None:
+        """Update the status label with the saved file path and make it clickable."""
+        self.last_saved_file = file_path
+        self.status_label.config(text=f"Audio saved to {file_path} (click to open folder)")
+        # Ensure click binding exists
+        self.status_label.bind("<Button-1>", self.open_saved_folder)
+        self.status_label.config(cursor="hand2")
+
+    def open_saved_folder(self, event=None) -> None:
+        """Open the folder containing the last saved audio file."""
+        if self.last_saved_file and os.path.exists(self.last_saved_file):
+            folder_path = os.path.dirname(self.last_saved_file)
+            try:
+                if os.name == 'nt':  # Windows
+                    os.startfile(folder_path)
+                elif os.name == 'posix':  # macOS and Linux
+                    subprocess.Popen(['xdg-open', folder_path])
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not open folder: {str(e)}")
 
     def skip_sentence(self) -> None:
         """Skip a sentence"""
@@ -398,6 +418,7 @@ class Gui:
             bootstyle="info",
         )
         self.status_label.grid(row=0, column=0, sticky="w")
+        self.status_label.bind("<Button-1>", self.open_saved_folder)
 
         # Progress bar for audio generation
         self.progress_var = tk.DoubleVar()
@@ -432,117 +453,139 @@ class Gui:
             )
             if file_path:
                 self.file_path_var.set(f"File: {file_path}")
-                try:
-                    image_extensions = [
-                        ".png",
-                        ".jpg",
-                        ".jpeg",
-                        ".webp",
-                        ".bmp",
-                        ".tiff",
-                        ".tif",
-                    ]
-                    _, file_ext = os.path.splitext(file_path.lower())
-
-                    if file_ext in image_extensions:
-                        self.text_area.delete(1.0, tk.END)
-                        results = self.reader.readtext(file_path)
-                        image_text = ""
-                        image_text = " ".join(
-                            text for _, text, _ in results if text
-                        ).strip()
-
-                        self.text_area.insert(
-                            tk.END,
-                            image_text,
-                        )
-                    elif file_ext == ".pdf":
-                        self.text_area.delete(1.0, tk.END)
-                        try:
-                            # First, try standard text extraction
-                            with open(file_path, "rb") as pdf_file:
-                                reader = PdfReader(pdf_file)
-                                text = "\n".join(
-                                    page.extract_text() or "" for page in reader.pages
-                                )
-
-                            # If no text extracted, it's likely a scanned PDF - use OCR
-                            if not text.strip():
-                                if HAS_FITZ:
-                                    self.text_area.insert(
-                                        tk.END,
-                                        "Detected scanned PDF. Processing with OCR using PyMuPDF (this may take a moment)...\n",
-                                    )
-                                    self.text_area.update()
-
-                                    images = []
-                                    document = fitz.open(file_path)
-                                    for page_index in range(len(document)):
-                                        page = document[page_index]
-                                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-                                        mode = "RGBA" if pix.alpha else "RGB"
-                                        image = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
-                                        images.append(image)
-                                elif HAS_PDF2IMAGE:
-                                    self.text_area.insert(
-                                        tk.END,
-                                        "Detected scanned PDF. Processing with OCR using pdf2image (this may take a moment)...\n",
-                                    )
-                                    self.text_area.update()
-                                    images = convert_from_path(file_path)
-                                else:
-                                    raise RuntimeError(
-                                        "Scanned PDF detected, but neither PyMuPDF nor pdf2image is available. "
-                                        "Install PyMuPDF or poppler for pdf2image."
-                                    )
-
-                                ocr_texts = []
-                                for idx, image in enumerate(images):
-                                    self.text_area.delete(1.0, tk.END)
-                                    self.text_area.insert(
-                                        tk.END,
-                                        f"OCR Processing: Page {idx + 1}/{len(images)}...\n",
-                                    )
-                                    self.text_area.update()
-
-                                    image_array = np.array(image)
-                                    results = self.reader.readtext(image_array)
-                                    page_text = "\n".join(
-                                        text for _, text, _ in results if text
-                                    ).strip()
-                                    if page_text:
-                                        ocr_texts.append(page_text)
-
-                                text = "\n".join(ocr_texts)
-
-                            self.text_area.delete(1.0, tk.END)
-                            self.text_area.insert(tk.END, text)
-                        except Exception as e:
-                            self.text_area.delete(1.0, tk.END)
-                            self.text_area.insert(
-                                tk.END,
-                                f"Error reading PDF file: {str(e)}",
-                            )
-                    else:
-                        try:
-                            with open(file_path, "r", encoding="utf-8") as file:
-                                content = file.read()
-                        except UnicodeDecodeError:
-                            with open(
-                                file_path,
-                                "r",
-                                encoding="cp1252",
-                                errors="replace",
-                            ) as file:
-                                content = file.read()
-
-                        self.text_area.delete(1.0, tk.END)
-                        self.text_area.insert(tk.END, content)
-                except Exception as e:
-                    self.text_area.delete(1.0, tk.END)
-                    self.text_area.insert(tk.END, f"Error reading file: {str(e)}")
+                # Show progress bar and disable button
+                self.progress_bar.grid(row=0, column=1, sticky="ew", padx=(10, 10))
+                self.progress_var.set(0)
+                self.status_label.config(text="Loading file...")
+                
+                # Start file loading in a background thread
+                thread = threading.Thread(target=self.load_file_thread, args=(file_path,), daemon=True)
+                thread.start()
         except Exception as e:
             print(f"An error occurred: {e}")
+
+    def load_file_thread(self, file_path: str):
+        """Load file in background thread with progress updates."""
+        try:
+            image_extensions = [
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".webp",
+                ".bmp",
+                ".tiff",
+                ".tif",
+            ]
+            _, file_ext = os.path.splitext(file_path.lower())
+
+            if file_ext in image_extensions:
+                self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                self.root.after(0, lambda: self.status_label.config(text="Processing image with OCR..."))
+                self.root.after(0, lambda: self.progress_var.set(50))
+                
+                results = self.reader.readtext(file_path)
+                image_text = ""
+                image_text = " ".join(
+                    text for _, text, _ in results if text
+                ).strip()
+
+                self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                self.root.after(0, lambda: self.text_area.insert(tk.END, image_text))
+                self.root.after(0, lambda: self.progress_bar.grid_remove())
+                self.root.after(0, lambda: self.status_label.config(text="Ready"))
+                
+            elif file_ext == ".pdf":
+                self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                try:
+                    # First, try standard text extraction
+                    with open(file_path, "rb") as pdf_file:
+                        reader = PdfReader(pdf_file)
+                        self.root.after(0, lambda: self.progress_var.set(25))
+                        text = "\n".join(
+                            page.extract_text() or "" for page in reader.pages
+                        )
+                        self.root.after(0, lambda: self.progress_var.set(50))
+
+                    # If no text extracted, it's likely a scanned PDF - use OCR
+                    if not text.strip():
+                        if HAS_FITZ:
+                            self.root.after(0, lambda: self.status_label.config(text="Detected scanned PDF. Processing with OCR..."))
+
+                            images = []
+                            document = fitz.open(file_path)
+                            for page_index in range(len(document)):
+                                page = document[page_index]
+                                pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+                                mode = "RGBA" if pix.alpha else "RGB"
+                                image = Image.frombytes(mode, [pix.width, pix.height], pix.samples)
+                                images.append(image)
+                        elif HAS_PDF2IMAGE:
+                            self.root.after(0, lambda: self.status_label.config(text="Detected scanned PDF. Processing with OCR..."))
+                            images = convert_from_path(file_path)
+                        else:
+                            raise RuntimeError(
+                                "Scanned PDF detected, but neither PyMuPDF nor pdf2image is available. "
+                                "Install PyMuPDF or poppler for pdf2image."
+                            )
+
+                        ocr_texts = []
+                        for idx, image in enumerate(images):
+                            # Update progress
+                            progress = 50 + (idx / len(images)) * 50
+                            self.root.after(0, lambda p=progress: self.progress_var.set(p))
+                            self.root.after(0, lambda idx=idx, total=len(images): 
+                                           self.status_label.config(text=f"Processing page {idx + 1}/{total}..."))
+
+                            image_array = np.array(image)
+                            results = self.reader.readtext(image_array)
+                            page_text = "\n".join(
+                                text for _, text, _ in results if text
+                            ).strip()
+                            if page_text:
+                                ocr_texts.append(page_text)
+
+                        text = "\n".join(ocr_texts)
+
+                    self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                    self.root.after(0, lambda: self.text_area.insert(tk.END, text))
+                except Exception as e:
+                    self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                    self.root.after(0, lambda: self.text_area.insert(
+                        tk.END,
+                        f"Error reading PDF file: {str(e)}",
+                    ))
+                finally:
+                    self.root.after(0, lambda: self.progress_bar.grid_remove())
+                    self.root.after(0, lambda: self.status_label.config(text="Ready"))
+                    
+            else:
+                # Text file
+                try:
+                    self.root.after(0, lambda: self.status_label.config(text="Loading text file..."))
+                    self.root.after(0, lambda: self.progress_var.set(25))
+                    
+                    with open(file_path, "r", encoding="utf-8") as file:
+                        content = file.read()
+                except UnicodeDecodeError:
+                    with open(
+                        file_path,
+                        "r",
+                        encoding="cp1252",
+                        errors="replace",
+                    ) as file:
+                        content = file.read()
+
+                self.root.after(0, lambda: self.progress_var.set(75))
+                self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+                self.root.after(0, lambda: self.text_area.insert(tk.END, content))
+                self.root.after(0, lambda: self.progress_bar.grid_remove())
+                self.root.after(0, lambda: self.status_label.config(text="Ready"))
+                
+        except Exception as e:
+            self.root.after(0, lambda: self.text_area.delete(1.0, tk.END))
+            self.root.after(0, lambda: self.text_area.insert(tk.END, f"Error reading file: {str(e)}"))
+            self.root.after(0, lambda: self.progress_bar.grid_remove())
+            self.root.after(0, lambda: self.status_label.config(text="Ready"))
 
     def add_text_area(self, container):
         """Create text area"""
