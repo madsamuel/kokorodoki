@@ -3,6 +3,7 @@ import os
 import queue
 import signal
 import subprocess
+import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -285,7 +286,7 @@ class Gui:
         """Save audio to file"""
         file_path = filedialog.asksaveasfilename(
             defaultextension=".wav",
-            filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            filetypes=[("MP3 files", "*.mp3"), ("WAV files", "*.wav"), ("All files", "*.*")],
             title="Save Audio As",
         )
         if file_path:
@@ -294,7 +295,7 @@ class Gui:
                 try:
                     # Split text into sentences for progress tracking
                     from utils import split_text_to_sentences
-                    sentences = split_text_to_sentences(text, self.current_language)
+                    sentences = split_text_to_sentences(text, self.nltk_language)
                     
                     # Show progress bar
                     self.progress_bar.grid()
@@ -321,19 +322,21 @@ class Gui:
                             self.root.after(0, lambda: self.save_btn.config(state="normal"))
                             self.root.after(0, lambda: self._update_saved_file_status(file_path))
                         except Exception as e:
+                            error_text = str(e)[:120]
+                            print(f"Save audio failed: {e}", file=sys.stderr)
                             self.root.after(0, lambda: self.progress_bar.grid_remove())
                             self.root.after(0, lambda: self.save_btn.config(state="normal"))
-                            self.root.after(0, lambda: self.status_label.config(text="Save failed"))
-                            self.root.after(0, lambda: messagebox.showerror("Save Error", f"Failed to save audio: {str(e)}"))
+                            self.root.after(0, lambda: self.status_label.config(text=f"Save failed: {error_text}"))
                     
                     thread = threading.Thread(target=generate_thread, daemon=True)
                     thread.start()
                     
                 except Exception as e:
+                    error_text = str(e)[:120]
+                    print(f"Save audio failed: {e}", file=sys.stderr)
                     self.progress_bar.grid_remove()
                     self.save_btn.config(state="normal")
-                    self.status_label.config(text="Save failed")
-                    messagebox.showerror("Save Error", f"Failed to save audio: {str(e)}")
+                    self.status_label.config(text=f"Save failed: {error_text}")
             else:
                 messagebox.showwarning("No Text", "Please enter some text to save as audio.")
 

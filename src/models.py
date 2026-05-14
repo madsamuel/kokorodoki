@@ -3,6 +3,7 @@ import queue
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import Optional
 
 import librosa
@@ -11,6 +12,7 @@ import sounddevice as sd
 import soundfile as sf
 import torch
 from kokoro import KPipeline
+from pydub import AudioSegment
 from rich.progress import (
     BarColumn,
     Progress,
@@ -137,8 +139,8 @@ class TTSPlayer:
             if progress_callback:
                 # GUI mode: use callback
                 progress_callback(0, total_sentences, "Starting generation...")
-                
                 audio_chunks = []
+
                 for i, sentence in enumerate(sentences):
                     progress_callback(i, total_sentences, f"Processing sentence {i+1}/{total_sentences}...")
                     
@@ -147,16 +149,16 @@ class TTSPlayer:
                     )
 
                     for result in generator:
-                        trimed_audio, _ = librosa.effects.trim(
-                            result.audio.numpy(), top_db=70
-                        )
-                        audio_chunks.append(self.to_stereo(trimed_audio))
+                        if result.audio is None:
+                            continue
+                        audio_chunk = self._prepare_audio_chunk(result.audio.numpy())
+                        audio_chunks.append(audio_chunk)
 
-                progress_callback(total_sentences, total_sentences, "Writing to file...")
-                
+                if not audio_chunks:
+                    raise ValueError("No audio was generated for the requested text.")
+
                 full_audio = np.concatenate(audio_chunks, axis=0)
-                sf.write(output_file, full_audio, SAMPLE_RATE, format="WAV")
-                
+                self._save_audio_file(full_audio, output_file)
                 progress_callback(total_sentences, total_sentences, f"Saved to {output_file}")
             else:
                 # CLI mode: use rich progress
@@ -185,7 +187,7 @@ class TTSPlayer:
                             audio_chunks.append(self.to_stereo(trimed_audio))
 
                     full_audio = np.concatenate(audio_chunks, axis=0)
-                    sf.write(output_file, full_audio, SAMPLE_RATE, format="WAV")
+                    self._save_audio_file(full_audio, output_file)
 
                     progress.update(
                         task,
@@ -206,6 +208,75 @@ class TTSPlayer:
             else:
                 console.print(f"[bold red]Generation error:[/] {str(e)}")
             raise
+
+    def _prepare_audio_chunk(self, audio) -> np.ndarray:
+        """Normalize model output to 2-channel float32 audio."""
+        audio = np.asarray(audio, dtype=np.float32)
+
+        if audio.ndim == 1:
+            stereo = np.stack([audio, audio], axis=1)
+            return stereo
+
+        if audio.ndim == 2:
+            if audio.shape[1] == 2:
+                stereo = audio
+            elif audio.shape[0] == 2:
+                stereo = audio.T
+            elif audio.shape[1] == 1:
+                stereo = np.repeat(audio, 2, axis=1)
+            elif audio.shape[0] == 1:
+                stereo = np.repeat(audio.T, 2, axis=1)
+            else:
+                mono = np.mean(audio, axis=1) if audio.shape[0] > audio.shape[1] else np.mean(audio, axis=0)
+                stereo = np.stack([mono, mono], axis=1)
+            return self._trim_audio(stereo)
+
+        raise ValueError(
+            f"Unsupported audio shape: {audio.shape}. Expected 1D or 2D with 2 channels."
+        )
+
+    def _trim_audio(self, audio: np.ndarray) -> np.ndarray:
+        if audio.ndim == 1:
+            trimmed, _ = librosa.effects.trim(audio, top_db=70)
+            return trimmed
+
+        mono = np.mean(audio, axis=1)
+        trimmed_mono, _ = librosa.effects.trim(mono, top_db=70)
+        return audio[: len(trimmed_mono), :]
+
+    def _save_audio_file(self, audio: np.ndarray, output_file: str) -> None:
+        """Save audio to WAV or MP3 format based on file extension."""
+        ext = Path(output_file).suffix.lower()
+        if ext == ".wav":
+            sf.write(output_file, audio, SAMPLE_RATE, format="WAV")
+        elif ext == ".mp3":
+            self._export_mp3(audio, output_file)
+        else:
+            raise ValueError("Unsupported output format. Use .wav or .mp3")
+
+    def _export_mp3(self, audio: np.ndarray, output_file: str, bitrate: str = "192k") -> None:
+        """Export audio to MP3 format using pydub."""
+        try:
+            # Ensure audio is clipped to valid range
+            clipped = np.clip(audio, -1.0, 1.0)
+            # Convert to 16-bit PCM
+            pcm16 = (clipped * 32767).astype(np.int16)
+            # Create AudioSegment from PCM data
+            segment = AudioSegment(
+                pcm16.tobytes(),
+                frame_rate=SAMPLE_RATE,
+                sample_width=2,
+                channels=2,
+            )
+            # Export to MP3
+            segment.export(output_file, format="mp3", bitrate=bitrate)
+        except Exception as exc:
+            raise RuntimeError(
+                "MP3 export failed. Make sure ffmpeg is installed and available in PATH. "
+                "On Linux: sudo apt install ffmpeg | "
+                "On macOS: brew install ffmpeg | "
+                "On Windows: download from ffmpeg.org"
+            ) from exc
 
     def generate_srt_timed_audio(self, srt_file: str, output_file="Output.wav") -> None:
         """Generate timed audio based on SRT subtitle file"""
@@ -282,7 +353,7 @@ class TTSPlayer:
                     progress.update(task, advance=1)
 
                 # Save the final audio
-                sf.write(output_file, full_audio, SAMPLE_RATE, format="WAV")
+                self._save_audio_file(full_audio, output_file)
 
                 progress.update(
                     task,

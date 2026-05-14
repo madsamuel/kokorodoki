@@ -54,8 +54,8 @@ https://github.com/user-attachments/assets/103b6bd0-0010-4c3d-a373-cf4b218a05a0
 * **🗌 Clipboard Monitoring (Daemon Mode)**
   Automatically speak out any copied/selected text.
 
-* **📂 Export to WAV**
-  Save generated audio for offline use or editing.
+* **📂 Export to WAV or MP3**
+  Save generated audio in WAV or MP3 format for offline use or editing.
 
 * **🎬 SRT Subtitle Support**
   Generate timed audio from SRT subtitle files with perfect synchronization.
@@ -114,6 +114,7 @@ Make sure you have the following installed (see below for a guide):
 * **Package Manager**: `uv`
 * **Python interface to the Tcl/Tk GUI toolkit**: `python3.12-tkinter`
 * **Clipboard Support (for Daemon Mode)**: `xclip` or `wl-clipboard` for Wayland
+* **FFmpeg**: Required for MP3 export (install via `apt install ffmpeg` on Linux, `brew install ffmpeg` on macOS, or download from ffmpeg.org on Windows)
 
 ### Setup Instructions
 
@@ -272,11 +273,17 @@ doki -v af_sky
 # Copy text again and play with:
 doki
 
-# Generate and save audio to a file
+# Generate and save audio to a WAV file
 kokorodoki -l b -v bf_lily -t "Generate audio file" -o output.wav
+
+# Generate and save audio to an MP3 file
+kokorodoki -l b -v bf_lily -t "Generate audio file" -o output.mp3
 
 # Generate timed audio from SRT subtitle file (auto-detected)
 kokorodoki -f subtitles.srt -o timed_audio.wav
+
+# Generate timed audio from SRT subtitle file in MP3 format
+kokorodoki -f subtitles.srt -o timed_audio.mp3
 
 ```
 
@@ -300,7 +307,7 @@ kokorodoki -f subtitles.srt -o timed_audio.wav
 * `--daemon` Run in daemon mode.
 * `--text`, `-t` Supply a text string for CLI mode.
 * `--file`, `-f` Supply a text file or SRT subtitle file (SRT files detected automatically).
-* `--output`, `-o` Specify output `.wav` file path.
+* `--output`, `-o` Specify output `.wav` or `.mp3` file path.
 * `--all` Test all voices for the selected language (only with `--text` or text files).
 
 #### Other Options
@@ -385,7 +392,7 @@ Features:
 - Load text files or images (OCR)
 - Play, pause, resume, skip sentences
 - Change language, voice, speed
-- **Save audio to WAV file** using the 💾 button
+- **Save audio to WAV or MP3 file** using the 💾 button
 
 Themes:
 1. darkly
@@ -486,14 +493,23 @@ Use the command-line interface for quick, one-off tasks:
 # Speak text
 kokorodoki --text "Hello, world!"              
 
-# Speak text and save audio to file
+# Speak text and save audio to WAV file
 kokorodoki --text "Hello, world!" --output hello.wav
 
-# Speak text from a file and save the audio to a file
+# Speak text and save audio to MP3 file
+kokorodoki --text "Hello, world!" --output hello.mp3
+
+# Speak text from a file and save the audio to WAV
 kokorodoki --file input.txt --output out.wav   
+
+# Speak text from a file and save the audio to MP3
+kokorodoki --file input.txt --output out.mp3   
 
 # Generate timed audio from SRT subtitle file (auto-detected)
 kokorodoki --file subtitles.srt --output timed_audio.wav
+
+# Generate timed audio from SRT subtitle file as MP3
+kokorodoki --file subtitles.srt --output timed_audio.mp3
 
 # Speak using all available voices of a specific language
 kokorodoki -l a --text "All voices" --all      
@@ -537,6 +553,7 @@ kokorodoki -f subtitles.srt -l a -v af_heart -o output.wav
 * `nltk` – Sentence parsing
 * `torch`, `numpy`, `librosa` – Audio processing
 * `sounddevice`, `soundfile` – Audio playback
+* `pydub` – MP3 audio export
 * [`kokoro`](https://huggingface.co/hexgrad/Kokoro-82M) – The TTS model
 * `tkinter`, `ttkbootstrap` – GUI theming
 * `rich` – Fancy CLI output

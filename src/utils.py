@@ -6,7 +6,35 @@ from datetime import timedelta
 from typing import Dict, List, Optional
 
 if platform.system() == "Windows":
-    import pyreadline3 as readline
+    try:
+        import pyreadline3 as readline
+    except ImportError:
+        try:
+            import readline
+        except ImportError:
+            class _ReadlineStub:
+                def clear_history(self):
+                    pass
+
+                def write_history_file(self, path):
+                    pass
+
+                def read_history_file(self, path):
+                    pass
+
+                def set_history_length(self, length):
+                    pass
+
+                def parse_and_bind(self, value):
+                    pass
+
+                def set_completer(self, completer):
+                    pass
+
+                def set_completer_delims(self, value):
+                    pass
+
+            readline = _ReadlineStub()
 else:
     import readline
 

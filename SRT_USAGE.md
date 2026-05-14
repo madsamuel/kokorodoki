@@ -6,19 +6,31 @@ KokoroDoki now supports generating timed audio from SRT subtitle files. This fea
 
 ## Usage
 
-### Basic Usage
+### Basic Usage - WAV Format
 ```bash
 # Generate timed audio from SRT file (auto-detected)
 kokorodoki -f subtitles.srt -o synchronized_audio.wav
 ```
 
+### Basic Usage - MP3 Format
+```bash
+# Generate timed audio from SRT file as MP3
+kokorodoki -f subtitles.srt -o synchronized_audio.mp3
+```
+
 ### With Custom Voice and Language
 ```bash
-# American English with heart voice
+# American English with heart voice (WAV format)
 kokorodoki -f subtitles.srt -l a -v af_heart -o output.wav
 
-# British English with lily voice
+# American English with heart voice (MP3 format)
+kokorodoki -f subtitles.srt -l a -v af_heart -o output.mp3
+
+# British English with lily voice (WAV format)
 kokorodoki -f subtitles.srt -l b -v bf_lily -o british_audio.wav
+
+# British English with lily voice (MP3 format)
+kokorodoki -f subtitles.srt -l b -v bf_lily -o british_audio.mp3
 ```
 
 ## SRT File Format

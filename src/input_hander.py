@@ -249,8 +249,8 @@ def parse_args() -> Args:
         )
         sys.exit(1)
 
-    if args.output is not None and not args.output.endswith(".wav"):
-        console.print("[bold red]Error:[/] The output file name should end with .wav")
+    if args.output is not None and not args.output.lower().endswith((".wav", ".mp3")):
+        console.print("[bold red]Error:[/] The output file name should end with .wav or .mp3")
         sys.exit(1)
 
     # Validate that output or all isn't used without input
