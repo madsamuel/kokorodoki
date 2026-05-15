@@ -136,65 +136,66 @@ class TTSPlayer:
             total_sentences = len(sentences)
             logger.info(f"Saving audio to: {os.path.abspath(output_file)}")
             
+            # Stream audio to disk in both GUI and CLI modes to avoid large memory allocation.
+            ext = Path(output_file).suffix.lower()
+            temp_wav = None
+            if ext == ".mp3":
+                temp_wav = Path(output_file).with_suffix(".wav")
+                write_file = str(temp_wav)
+            else:
+                write_file = output_file
+
             if progress_callback:
                 # GUI mode: use callback
                 progress_callback(0, total_sentences, "Starting generation...")
-                audio_chunks = []
-
-                for i, sentence in enumerate(sentences):
-                    progress_callback(i, total_sentences, f"Processing sentence {i+1}/{total_sentences}...")
-                    
-                    generator = self.pipeline(
-                        sentence, voice=self.voice, speed=self.speed, split_pattern=None
-                    )
-
-                    for result in generator:
-                        if result.audio is None:
-                            continue
-                        audio_chunk = self._prepare_audio_chunk(result.audio.numpy())
-                        audio_chunks.append(audio_chunk)
-
-                if not audio_chunks:
-                    raise ValueError("No audio was generated for the requested text.")
-
-                full_audio = np.concatenate(audio_chunks, axis=0)
-                self._save_audio_file(full_audio, output_file)
-                progress_callback(total_sentences, total_sentences, f"Saved to {output_file}")
             else:
                 # CLI mode: use rich progress
-                with Progress(
+                progress = Progress(
                     SpinnerColumn("dots", style="yellow", speed=0.8),
                     TextColumn("[bold yellow]{task.description}"),
                     BarColumn(pulse_style="yellow", complete_style="blue"),
                     TimeElapsedColumn(),
-                ) as progress:
+                )
+                progress.__enter__()
+                task = progress.add_task(
+                    f"[bold yellow]Generating {output_file}",
+                    total=None,
+                )
 
-                    task = progress.add_task(
-                        f"[bold yellow]Generating {output_file}",
-                        total=None,
-                    )
-
-                    audio_chunks = []
-                    for sentence in sentences:
+            try:
+                with sf.SoundFile(write_file, "w", SAMPLE_RATE, 2, format="WAV") as audio_file:
+                    for i, sentence in enumerate(sentences):
+                        if progress_callback:
+                            progress_callback(i, total_sentences, f"Processing sentence {i+1}/{total_sentences}...")
                         generator = self.pipeline(
                             sentence, voice=self.voice, speed=self.speed, split_pattern=None
                         )
 
                         for result in generator:
-                            trimed_audio, _ = librosa.effects.trim(
+                            if result.audio is None:
+                                continue
+                            trimmed_audio, _ = librosa.effects.trim(
                                 result.audio.numpy(), top_db=70
                             )
-                            audio_chunks.append(self.to_stereo(trimed_audio))
+                            audio_chunk = self.to_stereo(trimmed_audio)
+                            audio_file.write(audio_chunk)
 
-                    full_audio = np.concatenate(audio_chunks, axis=0)
-                    self._save_audio_file(full_audio, output_file)
+                if ext == ".mp3":
+                    self._convert_wav_to_mp3(temp_wav, output_file)
+                    os.remove(temp_wav)
 
+                if progress_callback:
+                    progress_callback(total_sentences, total_sentences, f"Saved to {output_file}")
+                else:
                     progress.update(
                         task,
                         completed=1,
                         total=1,
                         description=f"[bold green]Saved to {output_file}[/]",
                     )
+            finally:
+                if not progress_callback:
+                    progress.__exit__(None, None, None)
 
         except KeyboardInterrupt:
             if progress_callback:
@@ -273,6 +274,21 @@ class TTSPlayer:
         except Exception as exc:
             raise RuntimeError(
                 "MP3 export failed. Make sure ffmpeg is installed and available in PATH. "
+                "On Linux: sudo apt install ffmpeg | "
+                "On macOS: brew install ffmpeg | "
+                "On Windows: download from ffmpeg.org"
+            ) from exc
+
+    def _convert_wav_to_mp3(self, wav_file: str, mp3_file: str, bitrate: str = "192k") -> None:
+        """Convert WAV file to MP3 without loading full audio into memory."""
+        try:
+            # Load WAV and export as MP3 using pydub
+            # This is more memory-efficient than loading numpy array
+            sound = AudioSegment.from_wav(wav_file)
+            sound.export(mp3_file, format="mp3", bitrate=bitrate)
+        except Exception as exc:
+            raise RuntimeError(
+                "MP3 conversion failed. Make sure ffmpeg is installed and available in PATH. "
                 "On Linux: sudo apt install ffmpeg | "
                 "On macOS: brew install ffmpeg | "
                 "On Windows: download from ffmpeg.org"

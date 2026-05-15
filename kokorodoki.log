@@ -1,0 +1,4 @@
+2026-05-14 23:11:37,286 INFO kokorodoki: Kokoro initialized
+2026-05-14 23:11:42,496 INFO kokorodoki: Kokoro pipeline initialized
+2026-05-14 23:11:42,720 INFO kokorodoki: Downloading nltk tokenizers finished
+2026-05-14 23:11:42,737 INFO kokorodoki: Saving audio to: D:\Code\TTS\kokorodoki\test_output.wav
