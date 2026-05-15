@@ -18,6 +18,7 @@ from config import (
     REPO_ID,
     SAMPLE_RATE,
     console,
+    logger,
 )
 
 with console.status(
@@ -43,7 +44,7 @@ with console.status(
         module="torch.nn.utils.weight_norm",
     )
     from kokoro import KPipeline
-console.print("[bold green]Kokoro initialized!")
+logger.info("Kokoro initialized")
 
 import easyocr
 import nltk
@@ -78,7 +79,7 @@ def start(args: Args) -> None:
             pipeline = KPipeline(
                 lang_code=args.language, repo_id=REPO_ID, device=args.device
             )
-        console.print("[bold green]Kokoro pipeline initialized!")
+        logger.info("Kokoro pipeline initialized")
 
         # Download nltk tokenizers if not found
         try:
@@ -93,7 +94,7 @@ def start(args: Args) -> None:
             ):
                 nltk.download("punkt", quiet=True)
                 nltk.download("punkt_tab", quiet=True)
-            console.print("[bold green]Downloading nltk tokenizers finished!")
+            logger.info("Downloading nltk tokenizers finished")
 
         # audio_warmup()
 

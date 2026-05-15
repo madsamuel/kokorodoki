@@ -21,7 +21,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from config import MAX_SPEED, MIN_SPEED, REPO_ID, SAMPLE_RATE, console
+from config import MAX_SPEED, MIN_SPEED, REPO_ID, SAMPLE_RATE, console, logger
 from utils import get_language_map, get_nltk_language, get_voices, parse_srt_file, split_text_to_sentences
 
 
@@ -134,7 +134,7 @@ class TTSPlayer:
         try:
             sentences = [text] if isinstance(text, str) else text
             total_sentences = len(sentences)
-            print(f"Saving audio to: {os.path.abspath(output_file)}")
+            logger.info(f"Saving audio to: {os.path.abspath(output_file)}")
             
             if progress_callback:
                 # GUI mode: use callback

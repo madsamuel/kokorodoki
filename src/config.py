@@ -1,4 +1,19 @@
+import logging
+from pathlib import Path
+
 from rich.console import Console
+
+LOG_FILE = Path.cwd() / "kokorodoki.log"
+
+logger = logging.getLogger("kokorodoki")
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+    )
+    logger.addHandler(handler)
+    logger.propagate = False
 
 SAMPLE_RATE = 24000  # Kokoro-82M sample rate
 MIN_SPEED = 0.5
